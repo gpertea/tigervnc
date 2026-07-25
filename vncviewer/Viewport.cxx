@@ -595,10 +595,12 @@ void Viewport::handleClipboardChange(int source, void *data)
     return;
 #endif
 
-  if (!Fl::clipboard_contains(Fl::clipboard_plain_text)) {
-    vlog.debug("Got non-plain text in local clipboard, ignoring.");
-    // Reset the state as if we don't have any clipboard data at all
-    self->pendingClientClipboard = false;
+  self->clipboardSource = source;
+
+  if (!self->hasFocus()) {
+    vlog.debug("Local clipboard changed whilst not focused, will notify server later");
+    self->pendingClientClipboard = true;
+    // Clear any older client clipboard from the server
     try {
       self->cc->announceClipboard(false);
     } catch (std::exception& e) {
@@ -608,12 +610,11 @@ void Viewport::handleClipboardChange(int source, void *data)
     return;
   }
 
-  self->clipboardSource = source;
-
-  if (!self->hasFocus()) {
-    vlog.debug("Local clipboard changed whilst not focused, will notify server later");
-    self->pendingClientClipboard = true;
-    // Clear any older client clipboard from the server
+  if (source != 0 &&
+      !Fl::clipboard_contains(Fl::clipboard_plain_text)) {
+    vlog.debug("Got non-plain text in local clipboard, ignoring.");
+    // Reset the state as if we don't have any clipboard data at all
+    self->pendingClientClipboard = false;
     try {
       self->cc->announceClipboard(false);
     } catch (std::exception& e) {
@@ -636,6 +637,13 @@ void Viewport::handleClipboardChange(int source, void *data)
 void Viewport::flushPendingClipboard()
 {
   if (pendingClientClipboard) {
+    if (clipboardSource != 0 &&
+        !Fl::clipboard_contains(Fl::clipboard_plain_text)) {
+      vlog.debug("Pending local clipboard has no plain text, ignoring.");
+      pendingClientClipboard = false;
+      return;
+    }
+
     vlog.debug("Focus regained after local clipboard change, notifying server");
     try {
       cc->announceClipboard(true);
