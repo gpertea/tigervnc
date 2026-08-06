@@ -1,0 +1,85 @@
+diff --git a/src/Fl_win32.cxx b/src/Fl_win32.cxx
+index 30450ab..66f6934 100644
+--- a/src/Fl_win32.cxx
++++ b/src/Fl_win32.cxx
+@@ -100,9 +100,38 @@ static void fl_clipboard_notify_untarget(HWND wnd);
+ // Internal variables
+ static HWND clipboard_wnd = 0;
+ static HWND next_clipboard_wnd = 0;
++static bool clipboard_format_listener = false;
+ 
+ static bool initial_clipboard = true;
+ 
++#ifndef WM_CLIPBOARDUPDATE
++# define WM_CLIPBOARDUPDATE 0x031D
++#endif
++
++typedef BOOL (WINAPI *AddClipboardFormatListenerProc)(HWND);
++typedef BOOL (WINAPI *RemoveClipboardFormatListenerProc)(HWND);
++
++static AddClipboardFormatListenerProc add_clipboard_format_listener = 0;
++static RemoveClipboardFormatListenerProc remove_clipboard_format_listener = 0;
++static bool clipboard_format_listener_resolved = false;
++
++static void resolve_clipboard_format_listener() {
++  HMODULE user32;
++
++  if (clipboard_format_listener_resolved)
++    return;
++
++  clipboard_format_listener_resolved = true;
++  user32 = GetModuleHandleW(L"user32.dll");
++  if (!user32)
++    return;
++
++  add_clipboard_format_listener = (AddClipboardFormatListenerProc)
++    GetProcAddress(user32, "AddClipboardFormatListener");
++  remove_clipboard_format_listener = (RemoveClipboardFormatListenerProc)
++    GetProcAddress(user32, "RemoveClipboardFormatListener");
++}
++
+ // dynamic wsock dll handling api:
+ #if defined(__CYGWIN__) && !defined(SOCKET)
+ # define SOCKET int
+@@ -858,6 +887,14 @@ static void fl_clipboard_notify_target(HWND wnd) {
+   if (clipboard_wnd)
+     return;
+ 
++  resolve_clipboard_format_listener();
++  if (add_clipboard_format_listener && remove_clipboard_format_listener &&
++      add_clipboard_format_listener(wnd)) {
++    clipboard_wnd = wnd;
++    clipboard_format_listener = true;
++    return;
++  }
++
+   // We get one fake WM_DRAWCLIPBOARD immediately, which we therefore
+   // need to ignore.
+   initial_clipboard = true;
+@@ -870,6 +907,13 @@ static void fl_clipboard_notify_untarget(HWND wnd) {
+   if (wnd != clipboard_wnd)
+     return;
+ 
++  if (clipboard_format_listener) {
++    remove_clipboard_format_listener(wnd);
++    clipboard_wnd = 0;
++    clipboard_format_listener = false;
++    return;
++  }
++
+   // We might be called late in the cleanup where Windows has already
+   // implicitly destroyed our clipboard window. At that point we need
+   // to do some extra work to manually repair the clipboard chain.
+@@ -1513,6 +1557,12 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
+     Fl::handle(FL_SCREEN_CONFIGURATION_CHANGED, NULL);
+     return 0;
+ 
++  case WM_CLIPBOARDUPDATE:
++    if ((hWnd == clipboard_wnd) && clipboard_format_listener &&
++        !fl_find(GetClipboardOwner()))
++      fl_trigger_clipboard_notify(1);
++    return 0;
++
+   case WM_CHANGECBCHAIN:
+     if ((hWnd == clipboard_wnd) && (next_clipboard_wnd == (HWND)wParam))
+       next_clipboard_wnd = (HWND)lParam;
