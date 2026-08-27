@@ -532,7 +532,9 @@ int Viewport::handle(int event)
     return 1;
 
   case FL_UNFOCUS:
-    // We won't get more key events, so reset our knowledge about keys
+    // We won't get more pointer or key events, so release any state the
+    // server might still consider pressed.
+    handlePointerEvent(lastPointerPos, 0);
     resetKeyboard();
     return 1;
 
