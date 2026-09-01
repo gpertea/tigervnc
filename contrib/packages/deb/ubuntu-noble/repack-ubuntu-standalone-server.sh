@@ -11,7 +11,7 @@ usage() {
 base_deb="$(readlink -f -- "$1")"
 upstream_deb="$(readlink -f -- "$2")"
 output_deb="$(readlink -m -- "$3")"
-version="${VERSION:-1.16.2+gpertea2}"
+version="${VERSION:-1.16.2+gpertea3}"
 
 [[ "$(dpkg-deb -f "$base_deb" Package)" == "tigervnc-standalone-server" ]] || {
   echo "error: base package is not tigervnc-standalone-server" >&2
