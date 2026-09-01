@@ -133,6 +133,9 @@ void vncPointerButtonAction(int buttonMask)
 {
 	int i;
 	ValuatorMask mask;
+	DeviceIntPtr master;
+
+	master = GetMaster(vncPointerDev, MASTER_POINTER);
 
 	for (i = 0; i < BUTTONS; i++) {
 		if ((buttonMask ^ oldButtonMask) & (1 << i)) {
@@ -141,6 +144,17 @@ void vncPointerButtonAction(int buttonMask)
 			valuator_mask_set_range(&mask, 0, 0, NULL);
 			QueuePointerEvents(vncPointerDev, action, i + 1,
 					   POINTER_RELATIVE, &mask);
+
+			/*
+			 * A release can occasionally clear the slave while leaving
+			 * its master latched. Queueing the same release directly on
+			 * the master is harmless when its state is already correct,
+			 * and lets Xorg reconcile a stale aggregate button state.
+			 */
+			if ((action == ButtonRelease) && master)
+				QueuePointerEvents(master, action, i + 1,
+						   POINTER_RELATIVE | POINTER_NORAW,
+						   &mask);
 		}
 	}
 
